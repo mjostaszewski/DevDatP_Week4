@@ -1,0 +1,74 @@
+---
+title: "Air quality 2017 data\nexploration with Shiny"
+author: "Marek Ostaszewski"
+date: "10/23/2017"
+output:
+  ioslides_presentation:
+    logo: shinylogo.png
+    css: styles.css
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Introduction
+
+The goal of the project is to let users explore interactively the Air Quality dataset for 2017 provided by EPA ([source data here](https://www.epa.gov/outdoor-air-quality-data)). 
+
+I've set up a Shiny application ([direct link here](https://mjostaszewski.shinyapps.io/DevDatP_W4/)) with three important components:
+
+> - Dynamic loading of variables in the drop-down menu
+> - Readout of selected data points on the associated scatterplot
+> - Application of `Leaflet` to display geographical locations of air quality sensors
+
+## Why Shiny instead of code run locally? {.codefont}
+
+We can download and process the air quality dataset, like below.
+```{r data-load, echo = TRUE, cache = TRUE, message = FALSE}
+library(dplyr); library(lubridate)
+download.file("https://aqs.epa.gov/aqsweb/airdata/annual_conc_by_monitor_2017.zip",
+              destfile = "annual_conc_by_monitor_2017.zip")
+unzip("annual_conc_by_monitor_2017.zip")
+anc_sub <- tbl_df(read.csv("annual_conc_by_monitor_2017.csv")) %>%
+  filter(Parameter.Name %in% c("PM2.5 - Local Conditions", "Ozone", "Sulfur dioxide")) %>%
+  mutate(X1st.Max.DateTime = ymd_hm(X1st.Max.DateTime))
+```
+
+And then apply calculations, like linear model, for a given subset.
+
+```{r data-lm, echo = TRUE, cache = TRUE, message = FALSE}
+my_model <- with(anc_sub, lm(X1st.Max.Value ~ X1st.Max.DateTime))
+summary(my_model)$coefficients
+```
+
+**This is resource-consuming (run on our side) and code-heavy.**
+
+## Benefits of Shiny
+
+The user can easily interact with data, calculations are run on the server side.
+
+Example: high sulfur dioxide values have been recorded near a hawaiian volcano.
+
+<img src="example.png" alt="Screenshot - example" align="middle" style="width: 700px;"/>
+
+## Highlights {.codefont}
+
+- `renderUI()` is a very useful function for generating input structures dynamically.
+
+```{r renderUI, echo = TRUE, eval = FALSE}
+# ui.R
+selectInput(inputId = "sensor_type", 
+            label = "A. Choose a sensor type:",
+            choices = c("PM2.5 - Local Conditions", "Ozone", "Sulfur dioxide")),
+uiOutput("choose_measure")
+#server.R
+output$choose_measure <- renderUI({
+  range <- anc_sub %>% filter(Parameter.Name == input$sensor_type) %>% pull(Metric.Used)
+  selectInput("selected_measure", "Choose a measure:", unique(range))
+})
+```
+
+- `Leaflet` is available for Shiny and well integrated.
+- Developing the client-server logic and code was really fun and productive.
+- see my github for the code of the Shiny app, and of this presentation, including the CSS stylesheet. 
